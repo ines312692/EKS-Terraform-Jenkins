@@ -1,3 +1,6 @@
+# EKS-Terraform-Jenkins Architecture
+
+```
 EKS-Terraform-Jenkins/
 ├── jenkins/
 │   └── Jenkinsfile
@@ -10,3 +13,4 @@ EKS-Terraform-Jenkins/
 │   └── vpc.tf
 ├── README.md
 └── installer.sh
+```
