@@ -33,8 +33,3 @@ output "public_subnets" {
   description = "List of IDs of public subnets"
   value       = module.vpc.public_subnets
 }
-
-output "lab_role_arn" {
-  description = "ARN of the LabRole used for EKS"
-  value       = data.aws_iam_role.lab_role.arn
-}

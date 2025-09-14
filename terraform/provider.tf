@@ -44,8 +44,3 @@ locals {
 
 # Data source to get current AWS account ID
 data "aws_caller_identity" "current" {}
-
-# Get the existing LabRole for EKS cluster service role
-data "aws_iam_role" "lab_role" {
-  name = "LabRole"
-}

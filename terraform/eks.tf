@@ -1,115 +1,82 @@
-# EKS Module - AWS Academy Labs Compatible Version
+# Alternative EKS configuration for AWS Academy - Minimal approach
+# Use this if the main eks.tf still has issues
+
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 19.0"  # Use older version for better compatibility
 
   cluster_name    = local.name
-  cluster_version = "1.28"
+  cluster_version = "1.27"  # Slightly older but more stable version
 
   # Cluster endpoint configuration
-  cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = true
+  cluster_endpoint_public_access  = true
   cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
 
   # VPC Configuration
-  vpc_id                   = module.vpc.vpc_id
-  subnet_ids               = module.vpc.private_subnets
-  control_plane_subnet_ids = module.vpc.intra_subnets
+  vpc_id     = module.vpc.vpc_id
+  subnet_ids = module.vpc.private_subnets
 
-  # Use existing LabRole for cluster service role
-  cluster_service_role_arn = data.aws_iam_role.lab_role.arn
-
-  # Cluster addons
+  # Cluster addons - minimal set
   cluster_addons = {
     coredns = {
-      most_recent = true
+      resolve_conflicts = "OVERWRITE"
     }
     kube-proxy = {
-      most_recent = true
+      resolve_conflicts = "OVERWRITE"
     }
     vpc-cni = {
-      most_recent = true
-    }
-    aws-ebs-csi-driver = {
-      most_recent = true
+      resolve_conflicts = "OVERWRITE"
     }
   }
 
-  # EKS Managed Node Group defaults
-  eks_managed_node_group_defaults = {
-    ami_type       = "AL2_x86_64"
-    instance_types = ["m5.large"]
-
-    # Use LabRole for node groups
-    iam_role_arn = data.aws_iam_role.lab_role.arn
-
-    # Security
-    attach_cluster_primary_security_group = true
-
-    # Disk configuration
-    block_device_mappings = {
-      xvda = {
-        device_name = "/dev/xvda"
-        ebs = {
-          volume_size           = 30
-          volume_type          = "gp3"
-          iops                 = 3000
-          throughput           = 150
-          encrypted            = true
-          delete_on_termination = true
-        }
-      }
-    }
-  }
-
-  # EKS Managed Node Groups
+  # Managed node groups
   eks_managed_node_groups = {
-    inescloud-cluster-wg = {
-      name = "inescloud-worker-group"
+    main = {
+      name = "inescloud-main-nodes"
+
+      instance_types = ["t3.medium"]
+      capacity_type  = "ON_DEMAND"  # Use ON_DEMAND instead of SPOT for stability
 
       min_size     = 1
       max_size     = 3
       desired_size = 2
 
-      instance_types = ["t3.large"]
-      capacity_type  = "SPOT"
+      # Use default AMI
+      ami_type = "AL2_x86_64"
 
-      # Use LabRole for this node group
-      iam_role_arn = data.aws_iam_role.lab_role.arn
+      # Disk configuration
+      disk_size = 30
 
-      # Scaling configuration
-      update_config = {
-        max_unavailable_percentage = 50
-      }
-
-      # Taints and labels
       labels = {
         Environment = "dev"
-        NodeGroup   = "inescloud-worker-group"
+        NodeGroup   = "main"
       }
 
-      taints = []
-
-      tags = merge(local.tags, {
-        ExtraTag = "helloworld"
-        NodeGroup = "inescloud-worker-group"
-      })
+      tags = local.tags
     }
   }
 
-  # Disable cluster creator admin permissions for AWS Academy Labs
-  enable_cluster_creator_admin_permissions = false
+  # Node security group rules - allow basic communication
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
 
-  # Skip access entries due to IAM restrictions in AWS Academy Labs
-  access_entries = {}
-
-  # Disable automatic IAM role creation
-  create_cluster_security_group = false
-  create_node_security_group    = false
-
-  # Use default security groups
-  cluster_security_group_additional_rules = {}
-  node_security_group_additional_rules    = {}
+    egress_all = {
+      description = "Node all egress"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "egress"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
 
   tags = local.tags
 }
