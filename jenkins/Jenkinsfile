@@ -25,7 +25,7 @@ pipeline {
 
         stage('Verify AWS Access') {
             steps {
-                container('terraform') {
+                container('aws') {
                     sh '''
                     echo "Verifying AWS access..."
                     aws sts get-caller-identity
