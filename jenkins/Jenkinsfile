@@ -1,0 +1,81 @@
+pipeline {
+    agent {
+        kubernetes {
+            inheritFrom 'terraform-agent'
+            defaultContainer 'multitool'
+            namespace 'terraform'
+            serviceAccount 'jenkins-deployer'
+        }
+    }
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_SESSION_TOKEN     = credentials('AWS_SESSION_TOKEN')
+        AWS_DEFAULT_REGION    = 'us-east-1'
+        KUBECONFIG            = "${env.WORKSPACE}/kubeconfig"
+    }
+    stages {
+        stage('Checkout SCM') {
+            steps {
+                container('terraform') {
+                    git branch: 'main', url: 'https://github.com/ines312692/EKS-Terraform-Jenkins.git'
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                container('terraform') {
+                    dir('terraform') {
+                        sh 'terraform init'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Validate') {
+            steps {
+                container('terraform') {
+                    dir('terraform') {
+                        sh 'terraform validate'
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                container('terraform') {
+                    dir('terraform') {
+                        sh 'terraform plan'
+                    }
+                    input(message: "Approve Terraform plan?", ok: "Apply")
+                }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                container('terraform') {
+                    dir('terraform') {
+                        sh 'terraform apply -auto-approve'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Nginx on EKS') {
+            steps {
+                container('kubectl') {
+                    dir('manifests') {
+                        sh '''
+                        aws eks --region us-east-1 update-kubeconfig --name amonkincloud-cluster
+                        kubectl apply -f deployment.yml
+                        kubectl apply -f service.yml
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}

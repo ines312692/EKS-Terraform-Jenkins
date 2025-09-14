@@ -1,0 +1,21 @@
+# --- .gitignore (section Terraform) ---
+# Répertoires de travail Terraform (plugins, modules, state caches)
+**/.terraform/
+terraform/.terraform/
+
+# Binaires providers téléchargés
+terraform/**/*.exe
+
+# Conserver le lock file (il n'est pas dans .terraform, la ligne ci‑dessous est juste indicative)
+!terraform/.terraform.lock.hcl
+# --- fin .gitignore ---
+
+# Étapes Git
+git add .gitignore
+git commit -m "chore: ignore .terraform and remove cached providers"
+
+# Vérification qu'aucun fichier .terraform n'est suivi
+git ls-files | findstr /R "\.terraform" || echo OK
+
+# Push
+git push origin main
