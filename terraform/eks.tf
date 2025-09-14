@@ -16,6 +16,9 @@ module "eks" {
   subnet_ids               = module.vpc.private_subnets
   control_plane_subnet_ids = module.vpc.intra_subnets
 
+  # Use existing LabRole for cluster service role
+  cluster_service_role_arn = data.aws_iam_role.lab_role.arn
+
   # Cluster addons
   cluster_addons = {
     coredns = {
@@ -36,6 +39,9 @@ module "eks" {
   eks_managed_node_group_defaults = {
     ami_type       = "AL2_x86_64"
     instance_types = ["m5.large"]
+
+    # Use LabRole for node groups
+    iam_role_arn = data.aws_iam_role.lab_role.arn
 
     # Security
     attach_cluster_primary_security_group = true
@@ -68,6 +74,9 @@ module "eks" {
       instance_types = ["t3.large"]
       capacity_type  = "SPOT"
 
+      # Use LabRole for this node group
+      iam_role_arn = data.aws_iam_role.lab_role.arn
+
       # Scaling configuration
       update_config = {
         max_unavailable_percentage = 50
@@ -94,8 +103,13 @@ module "eks" {
   # Skip access entries due to IAM restrictions in AWS Academy Labs
   access_entries = {}
 
+  # Disable automatic IAM role creation
+  create_cluster_security_group = false
+  create_node_security_group    = false
+
+  # Use default security groups
+  cluster_security_group_additional_rules = {}
+  node_security_group_additional_rules    = {}
+
   tags = local.tags
 }
-
-# Data source to get current AWS account ID
-data "aws_caller_identity" "current" {}

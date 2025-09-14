@@ -23,11 +23,27 @@ pipeline {
             }
         }
 
+        stage('Verify AWS Access') {
+            steps {
+                container('terraform') {
+                    sh '''
+                    echo "Verifying AWS access..."
+                    aws sts get-caller-identity
+                    aws iam list-roles --path-prefix /LabRole || echo "LabRole not found in path, checking all roles..."
+                    aws iam get-role --role-name LabRole || echo "LabRole not accessible"
+                    '''
+                }
+            }
+        }
+
         stage('Terraform Init') {
             steps {
                 container('terraform') {
                     dir('terraform') {
-                        sh 'terraform init'
+                        sh '''
+                        terraform init
+                        terraform providers
+                        '''
                     }
                 }
             }
@@ -47,7 +63,18 @@ pipeline {
             steps {
                 container('terraform') {
                     dir('terraform') {
-                        sh 'terraform plan'
+                        sh '''
+                        echo "Planning Terraform deployment..."
+                        terraform plan -detailed-exitcode || {
+                            EXITCODE=$?
+                            if [ $EXITCODE -eq 2 ]; then
+                                echo "Changes detected, proceeding..."
+                            else
+                                echo "Terraform plan failed with exit code: $EXITCODE"
+                                exit $EXITCODE
+                            fi
+                        }
+                        '''
                     }
                     input(message: "Approve Terraform plan?", ok: "Apply")
                 }
@@ -58,8 +85,26 @@ pipeline {
             steps {
                 container('terraform') {
                     dir('terraform') {
-                        sh 'terraform apply -auto-approve'
+                        sh '''
+                        echo "Applying Terraform configuration..."
+                        terraform apply -auto-approve
+                        echo "Waiting for EKS cluster to be ready..."
+                        sleep 30
+                        '''
                     }
+                }
+            }
+        }
+
+        stage('Configure kubectl') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    echo "Configuring kubectl for EKS cluster..."
+                    aws eks --region us-east-1 update-kubeconfig --name inescloud-cluster
+                    kubectl cluster-info
+                    kubectl get nodes --no-headers | wc -l | xargs -I {} echo "Number of nodes: {}"
+                    '''
                 }
             }
         }
@@ -69,13 +114,62 @@ pipeline {
                 container('kubectl') {
                     dir('manifests') {
                         sh '''
-                        aws eks --region us-east-1 update-kubeconfig --name amonkincloud-cluster
+                        echo "Deploying application to EKS..."
                         kubectl apply -f deployment.yml
                         kubectl apply -f service.yml
+
+                        echo "Waiting for deployment to be ready..."
+                        kubectl rollout status deployment/nginx-deployment --timeout=300s
+
+                        echo "Getting service information..."
+                        kubectl get services
+                        kubectl get pods
                         '''
                     }
                 }
             }
+        }
+
+        stage('Verify Deployment') {
+            steps {
+                container('kubectl') {
+                    sh '''
+                    echo "Verifying deployment..."
+                    kubectl get all -o wide
+
+                    echo "Checking pod logs..."
+                    kubectl logs -l app=nginx --tail=50
+
+                    echo "Getting external IP/endpoint..."
+                    kubectl get service nginx-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "LoadBalancer not yet available"
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            container('terraform') {
+                dir('terraform') {
+                    sh '''
+                    echo "Terraform state info:"
+                    terraform show -json > terraform-state.json || echo "Failed to export state"
+                    '''
+                }
+            }
+        }
+        failure {
+            container('terraform') {
+                sh '''
+                echo "Pipeline failed. Checking AWS resources..."
+                aws eks list-clusters --region us-east-1 || echo "No EKS clusters found"
+                aws ec2 describe-vpcs --filters "Name=tag:Project,Values=inescloud-cluster" --region us-east-1 || echo "No VPCs found"
+                '''
+            }
+        }
+        success {
+            echo 'Pipeline completed successfully! EKS cluster and application deployed.'
         }
     }
 }
