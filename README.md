@@ -10,6 +10,10 @@ Last updated: 2025-09-13 19:45 (local)
 - jenkins/Jenkinsfile — Jenkins Declarative Pipeline to run Terraform stages
 - installer.sh — Optional helper script (if used in your environment)
 
+## Repository structure
+
+![Architecture du projet](assets/arhcitecture.png)
+
 ## Prerequisites
 - AWS account with permissions to create VPC, EKS, IAM, and related resources
 - AWS CLI configured (aws configure) and credentials available to Jenkins
